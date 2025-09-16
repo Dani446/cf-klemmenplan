@@ -1,31 +1,37 @@
-import { NextResponse } from "next/server";
+import NextAuth, { type NextAuthOptions } from "next-auth";
+import AzureADProvider from "next-auth/providers/azure-ad";
 
-export async function POST(req: Request) {
-  try {
-    const form = await req.formData();
+export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
+  session: { strategy: "jwt" },
+  providers: [
+    AzureADProvider({
+      clientId: process.env.AZURE_AD_CLIENT_ID!,
+      clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
+      tenantId: process.env.AZURE_AD_TENANT_ID!,
+    }),
+  ],
+  callbacks: {
+    async signIn({ user }) {
+      const domain = process.env.ALLOWED_EMAIL_DOMAIN?.toLowerCase();
+      const email = user?.email?.toLowerCase() || "";
+      return domain ? email.endsWith(`@${domain}`) : true;
+    },
+    async jwt({ token, account, profile }) {
+      if (account) token.provider = account.provider;
+      if (profile && "email" in profile && profile.email) {
+        token.email = profile.email as string;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token?.email && session.user) {
+        session.user.email = token.email as string;
+      }
+      return session;
+    },
+  },
+};
 
-    // Accept multiple files under the key "files"
-    const items = form.getAll("files");
-    const files: File[] = items.filter((i): i is File => i instanceof File);
-
-    if (!files.length) {
-      return NextResponse.json({ error: "Keine Dateien empfangen" }, { status: 400 });
-    }
-
-    // Optional: einfache Begrenzung, kann bei Bedarf erhöht werden
-    const MAX_FILES = 50; // erlaubt 10+ bequem
-    if (files.length > MAX_FILES) {
-      return NextResponse.json(
-        { error: `Zu viele Dateien: ${files.length}. Maximal erlaubt: ${MAX_FILES}.` },
-        { status: 400 }
-      );
-    }
-
-    // Echo-Metadaten zurück, um den Roundtrip zu verifizieren
-    const summary = files.map((f) => ({ name: f.name, size: f.size, type: f.type }));
-
-    return NextResponse.json({ received: files.length, files: summary, note: "Upload OK – OpenAI-Analyse folgt" });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
-  }
-}
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };

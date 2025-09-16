@@ -8,7 +8,7 @@ export default function Page() {
   const { data: session, status } = useSession();
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Chat state
@@ -26,11 +26,18 @@ export default function Page() {
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Unbekannter Fehler");
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const errMsg =
+          (typeof data === "object" && data && "error" in data
+            ? String((data as { error?: unknown }).error)
+            : "Unbekannter Fehler");
+        throw new Error(errMsg);
+      }
       setResult(data);
-    } catch (e: any) {
-      setError(e?.message || String(e));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
     } finally {
       setIsUploading(false);
     }
@@ -49,12 +56,22 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ threadId, message: userMsg.content }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Chat-Fehler");
-      if (data.threadId) setThreadId(data.threadId);
-      if (data.reply) setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
-    } catch (e: any) {
-      setError(e?.message || String(e));
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        const errMsg =
+          (typeof data === "object" && data && "error" in data
+            ? String((data as { error?: unknown }).error)
+            : "Chat-Fehler");
+        throw new Error(errMsg);
+      }
+      if (typeof data === "object" && data) {
+        const d = data as { threadId?: string; reply?: string };
+        if (d.threadId) setThreadId(d.threadId);
+        if (d.reply) setMessages((m) => [...m, { role: "assistant", content: d.reply as string }]);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
     } finally {
       setChatLoading(false);
     }
@@ -75,11 +92,13 @@ export default function Page() {
 
       {status === "authenticated" ? (
         <section style={{ marginTop: 16 }}>
-          <p>Angemeldet als <b>{session?.user?.email}</b></p>
+          <p>
+            Angemeldet als <b>{session?.user?.email}</b>
+          </p>
 
           {/* Upload-Box */}
           <div style={{ marginTop: 16, border: "1px solid #ddd", padding: 16, borderRadius: 8 }}>
-            <label style={{ display: "block", marginBottom: 8 }}>RI-/Dokument-Datei hochladen (PDF/Bild):</label>
+            <label style={{ display: "block", marginBottom: 8 }}>RI-/Dokument-Dateien hochladen (PDF/Bild):</label>
             <input
               type="file"
               accept=".pdf,.png,.jpg,.jpeg"
@@ -91,16 +110,12 @@ export default function Page() {
                 {isUploading ? "Analysiere…" : "Analysieren"}
               </button>
               {files.length > 0 && (
-                <span style={{ marginLeft: 8, opacity: 0.7 }}>
-                  {files.map((f) => f.name).join(", ")}
-                </span>
+                <span style={{ marginLeft: 8, opacity: 0.7 }}>{files.map((f) => f.name).join(", ")}</span>
               )}
             </div>
           </div>
 
-          {error && (
-            <p style={{ color: "#b00020", marginTop: 12 }}>Fehler: {error}</p>
-          )}
+          {error && <p style={{ color: "#b00020", marginTop: 12 }}>Fehler: {error}</p>}
 
           {result && (
             <div style={{ marginTop: 16 }}>
@@ -114,16 +129,20 @@ export default function Page() {
           {/* Chat-Box */}
           <div style={{ marginTop: 24, border: "1px solid #ddd", padding: 16, borderRadius: 8 }}>
             <h3 style={{ marginTop: 0 }}>Chat mit dem Assistenten</h3>
-            <div style={{
-              border: "1px solid #eee",
-              borderRadius: 6,
-              padding: 12,
-              height: 240,
-              overflowY: "auto",
-              background: "#fafafa",
-            }}>
+            <div
+              style={{
+                border: "1px solid #eee",
+                borderRadius: 6,
+                padding: 12,
+                height: 240,
+                overflowY: "auto",
+                background: "#fafafa",
+              }}
+            >
               {messages.length === 0 && (
-                <p style={{ opacity: 0.7 }}>Frag z. B.: "Welche Aktorik und Sensorik erkennst du im hochgeladenen RI-Schema?"</p>
+                <p style={{ opacity: 0.7 }}>
+                  Frag z. B.: &quot;Welche Aktorik und Sensorik erkennst du im hochgeladenen RI-Schema?&quot;
+                </p>
               )}
               {messages.map((m, i) => (
                 <div key={i} style={{ marginBottom: 10 }}>
@@ -138,13 +157,15 @@ export default function Page() {
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Nachricht eingeben…"
                 style={{ flex: 1, padding: 8 }}
-                onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") sendChat();
+                }}
               />
-              <button onClick={sendChat} disabled={!chatInput.trim() || chatLoading}>Senden</button>
+              <button onClick={sendChat} disabled={!chatInput.trim() || chatLoading}>
+                Senden
+              </button>
             </div>
-            {threadId && (
-              <p style={{ marginTop: 8, opacity: 0.6, fontSize: 12 }}>Thread: {threadId}</p>
-            )}
+            {threadId && <p style={{ marginTop: 8, opacity: 0.6, fontSize: 12 }}>Thread: {threadId}</p>}
           </div>
         </section>
       ) : (
