@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type UnsafeAny = any;
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -8,9 +5,6 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 import type { MessageContent } from "openai/resources/beta/threads/messages";
-
-// Using any[] for assistant content parts, as SDK types are unstable
-
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -134,8 +128,8 @@ Gib die Klemmenbelegung **zuerst als JSON** zurück, mit exakt dieser Struktur (
     const parts = (lastAssistant?.content ?? []) as MessageContent[];
     const reply =
       parts
-        .map((c) => (c.type === "text" ? c.text?.value : null))
-        .filter(Boolean)
+        .map((c) => (c.type === "text" ? c.text?.value ?? null : null))
+        .filter((v): v is string => Boolean(v))
         .join("\n\n") || "Analyse abgeschlossen – kein Textinhalt gefunden.";
 
     // 7) JSON-Tabelle extrahieren
