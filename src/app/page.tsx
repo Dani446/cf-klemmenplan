@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 "use client";
 // Narrow ReactMarkdown type (optional dependency)

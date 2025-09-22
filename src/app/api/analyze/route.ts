@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
+import type { MessageContent } from "openai/resources/beta/threads/messages";
+
 // Using any[] for assistant content parts, as SDK types are unstable
 
 
@@ -129,7 +131,7 @@ Gib die Klemmenbelegung **zuerst als JSON** zurück, mit exakt dieser Struktur (
     // 6) Letzte Assistenten-Antwort holen
     const list = await client.beta.threads.messages.list(threadId!, { limit: 15 });
     const lastAssistant = list.data.find((m) => m.role === "assistant");
-    const parts = (lastAssistant?.content ?? []) as UnsafeAny[];
+    const parts = (lastAssistant?.content ?? []) as MessageContent[];
     const reply =
       parts
         .map((c) => (c.type === "text" ? c.text?.value : null))
