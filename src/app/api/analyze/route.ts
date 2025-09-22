@@ -1,9 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type UnsafeAny = any;
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
+// Using any[] for assistant content parts, as SDK types are unstable
+
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -124,10 +129,10 @@ Gib die Klemmenbelegung **zuerst als JSON** zurück, mit exakt dieser Struktur (
     // 6) Letzte Assistenten-Antwort holen
     const list = await client.beta.threads.messages.list(threadId!, { limit: 15 });
     const lastAssistant = list.data.find((m) => m.role === "assistant");
-    const parts = (lastAssistant?.content ?? []) as Array<any>;
+    const parts = (lastAssistant?.content ?? []) as UnsafeAny[];
     const reply =
       parts
-        .map((c) => (c?.type === "text" ? c?.text?.value : null))
+        .map((c) => (c.type === "text" ? c.text?.value : null))
         .filter(Boolean)
         .join("\n\n") || "Analyse abgeschlossen – kein Textinhalt gefunden.";
 

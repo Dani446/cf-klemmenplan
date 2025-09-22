@@ -1,14 +1,46 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Narrow ReactMarkdown type (optional dependency)
+// Narrow ReactMarkdown type (optional dependency)
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
+import type { JSX } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
 
+type UploadedFile = { name: string; size: number; type?: string };
+type Row = {
+  signal: string;
+  category: string;
+  ioType: string;
+  module: string;
+  slot: string;
+  terminal: string;
+  voltage: string;
+  cable: string;
+  article: string;
+  source: string;
+};
+type TableData = {
+  controller?: string;
+  assumptions?: string;
+  rows: Row[];
+};
+type AnalysisResult = {
+  received?: number;
+  files?: UploadedFile[];
+  threadId?: string;
+  reply?: string;
+  note?: string;
+  table?: TableData;
+} | { error: string };
+
 // (Optional pretty markdown — run: npm i react-markdown)
 // If react-markdown is not installed, the fallback <pre> will be used.
-let ReactMarkdown: any;
+type MarkdownComponent = ((props: { children: string }) => React.ReactElement) | null;
+let ReactMarkdown: MarkdownComponent = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ReactMarkdown = require("react-markdown").default;
+  ReactMarkdown = (require("react-markdown").default as (props: { children: string }) => React.ReactElement);
 } catch {
   ReactMarkdown = null;
 }
@@ -19,7 +51,7 @@ export default function Page() {
   const { data: session, status } = useSession();
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<AnalysisResult | string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Chat state
@@ -29,7 +61,7 @@ export default function Page() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const [statusText, setStatusText] = useState<string | null>(null);
-  const [tableData, setTableData] = useState<any | null>(null);
+  const [tableData, setTableData] = useState<TableData | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [excelHref, setExcelHref] = useState<string | null>(null);
   const [excelName, setExcelName] = useState<string>("Klemmenbelegung.xlsx");
@@ -53,31 +85,31 @@ export default function Page() {
 
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
       const isJson = res.headers.get("content-type")?.includes("application/json");
-      const payload = isJson ? await res.json() : await res.text();
+      const payload: unknown = isJson ? await res.json() : await res.text();
       if (!res.ok) {
-        const errMsg = isJson
-          ? (typeof payload === "object" && payload && "error" in payload
-              ? String((payload as { error?: unknown }).error)
-              : `HTTP ${res.status}`)
-          : `HTTP ${res.status}: ${String(payload).slice(0, 200)}`;
+        const errMsg = isJson && typeof payload === "object" && payload !== null && "error" in (payload as Record<string, unknown>)
+          ? String((payload as { error?: unknown }).error)
+          : `HTTP ${res.status}${!isJson ? `: ${String(payload).slice(0,200)}` : ""}`;
         throw new Error(errMsg);
       }
 
       // Persist thread and surface note into chat
-      if (typeof payload === "object" && payload) {
-        const d = payload as { threadId?: string; reply?: string; note?: string; table?: any };
-        if (d.threadId) setThreadId(d.threadId);
-        if (d.note) setMessages((m) => [...m, { role: "assistant", content: d.note! }]);
-        // Reply bleibt im Ergebnisbereich; Chat wird nur für Nachfragen genutzt.
+      if (typeof payload === "object" && payload !== null) {
+        const d = payload as Partial<AnalysisResult>;
+        if ("threadId" in d && d.threadId) setThreadId(d.threadId);
+        if ("note" in d && typeof d.note === "string") {
+          setMessages((m) => [...m, { role: "assistant", content: d.note as string }]);
+        }
       }
-      setResult(payload);
-      if (typeof payload === "object" && payload && "table" in (payload as any)) {
-        setTableData((payload as any).table);
+      setResult(payload as AnalysisResult);
+
+      if (typeof payload === "object" && payload !== null && "table" in (payload as Record<string, unknown>)) {
+        const t = (payload as { table?: TableData }).table;
+        setTableData(t ?? null);
         try {
           // Build downloadable Excel when a valid table exists
-          const t = (payload as any).table as any;
-          if (t && t.rows && Array.isArray(t.rows)) {
-            const ws = XLSX.utils.json_to_sheet(t.rows);
+          if (t && Array.isArray(t.rows)) {
+            const ws = XLSX.utils.json_to_sheet<Row>(t.rows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Klemmenbelegung");
 
@@ -91,7 +123,9 @@ export default function Page() {
             setExcelHref(url);
 
             // name: try to derive from first file; fallback keeps default
-            const firstName = Array.isArray((payload as any).files) && (payload as any).files[0]?.name;
+            const firstName = (typeof payload === "object" && payload !== null && Array.isArray((payload as { files?: UploadedFile[] }).files))
+              ? ((payload as { files?: UploadedFile[] }).files?.[0]?.name)
+              : undefined;
             if (firstName) setExcelName(`Klemmenbelegung_${String(firstName).replace(/\.[^/.]+$/, "")}.xlsx`);
 
             // Show chat only after we have a first assistant answer
@@ -196,7 +230,7 @@ export default function Page() {
                   <label style={{ display: "block", marginBottom: 8 }}>RI-/Dokument-Dateien hochladen (PDF/Bild):</label>
                   <input
                     type="file"
-                    accept=".pdf,.png,.jpg,.jpeg"
+                    accept=".pdf,.png,.jpg,.jpeg,.bck"
                     multiple
                     onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                   />
@@ -223,19 +257,19 @@ export default function Page() {
 
                     {/* Summary cards */}
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                      {"received" in (result as any) && (
+                      {typeof result === "object" && result !== null && !("error" in result) && typeof result.received === "number" && (
                         <div style={{ border: "1px solid #eee", padding: 10, borderRadius: 8 }}>
                           <div style={{ fontSize: 12, opacity: 0.7 }}>Empfangene Dateien</div>
-                          <div style={{ fontSize: 18, fontWeight: 600 }}>{(result as any).received}</div>
+                          <div style={{ fontSize: 18, fontWeight: 600 }}>{result.received}</div>
                         </div>
                       )}
-                      {"threadId" in (result as any) && (
+                      {typeof result === "object" && result !== null && !("error" in result) && result.threadId && (
                         <div style={{ border: "1px solid #eee", padding: 10, borderRadius: 8, maxWidth: 400 }}>
                           <div style={{ fontSize: 12, opacity: 0.7 }}>Thread-ID</div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <code style={{ fontSize: 12 }}>{(result as any).threadId}</code>
+                            <code style={{ fontSize: 12 }}>{result.threadId}</code>
                             <button
-                              onClick={() => copyToClipboard(String((result as any).threadId))}
+                              onClick={() => copyToClipboard(String(result.threadId))}
                               style={{ fontSize: 12 }}
                               title="In die Zwischenablage kopieren"
                             >
@@ -247,15 +281,20 @@ export default function Page() {
                     </div>
 
                     {/* File badges */}
-                    {"files" in (result as any) && Array.isArray((result as any).files) && (
-                      <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {(result as any).files.map((f: any, idx: number) => (
-                          <span key={idx} className="badge">
-                            {f.name} <span style={{ opacity: 0.6, fontSize: 12 }}>({Math.round((f.size || 0) / 1024)} kB)</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {(() => {
+                      const filesArr = (typeof result === "object" && result !== null && !("error" in result) && Array.isArray(result.files))
+                        ? result.files
+                        : [];
+                      return filesArr.length ? (
+                        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {filesArr.map((f, idx) => (
+                            <span key={idx} className="badge">
+                              {f.name} <span style={{ opacity: 0.6, fontSize: 12 }}>({Math.round((f.size || 0) / 1024)} kB)</span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
 
                     {/* Excel Download block */}
                     {excelHref && (
@@ -273,13 +312,13 @@ export default function Page() {
                     )}
 
                     {/* Structured table (from JSON) */}
-                    {tableData && (tableData as any).rows && Array.isArray((tableData as any).rows) && (
+                    {tableData && tableData.rows && Array.isArray(tableData.rows) && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Vorschau (gekürzt) – maßgeblich ist die Excel-Datei</div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <div>
                             <div style={{ fontSize: 13, opacity: 0.7 }}>Regler</div>
-                            <div style={{ fontWeight: 600 }}>{(tableData as any).controller || "–"}</div>
+                            <div style={{ fontWeight: 600 }}>{tableData.controller || "–"}</div>
                           </div>
                         </div>
 
@@ -287,16 +326,16 @@ export default function Page() {
                           <table className="table">
                             <thead>
                               <tr>
-                                {["signal","category","ioType","module","slot","terminal","voltage","cable","article","source"].map((h) => (
+                                {(["signal","category","ioType","module","slot","terminal","voltage","cable","article","source"] as (keyof Row)[]).map((h) => (
                                   <th key={h}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {(tableData as any).rows.map((r: any, idx: number) => (
+                              {tableData.rows.map((r: Row, idx: number) => (
                                 <tr key={idx}>
-                                  {["signal","category","ioType","module","slot","terminal","voltage","cable","article","source"].map((k) => (
-                                    <td key={k}>{r?.[k] ?? ""}</td>
+                                  {(["signal","category","ioType","module","slot","terminal","voltage","cable","article","source"] as (keyof Row)[]).map((k) => (
+                                    <td key={k}>{r[k] ?? ""}</td>
                                   ))}
                                 </tr>
                               ))}
@@ -304,23 +343,23 @@ export default function Page() {
                           </table>
                         </div>
 
-                        {(tableData as any).assumptions && (
+                        {tableData.assumptions && (
                           <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                            Annahmen: {(tableData as any).assumptions}
+                            Annahmen: {tableData.assumptions}
                           </div>
                         )}
                       </div>
                     )}
 
                     {/* Assistant reply nicely rendered */}
-                    {"reply" in (result as any) && (result as any).reply && (
+                    {typeof result === "object" && result !== null && !("error" in result) && typeof result.reply === "string" && result.reply && (
                       <details style={{ marginTop: 14 }}>
                         <summary style={{ cursor: "pointer" }}>Erklärtext anzeigen (optional)</summary>
                         <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 8, padding: 12, background: "#fff" }}>
                           {ReactMarkdown ? (
-                            <ReactMarkdown>{String((result as any).reply)}</ReactMarkdown>
+                            ReactMarkdown({ children: String(result.reply) })
                           ) : (
-                            <pre style={{ whiteSpace: "pre-wrap" }}>{String((result as any).reply)}</pre>
+                            <pre style={{ whiteSpace: "pre-wrap" }}>{String(result.reply)}</pre>
                           )}
                         </div>
                       </details>

@@ -38,10 +38,16 @@ export async function POST(req: Request) {
 
     const list = await client.beta.threads.messages.list(tId!, { limit: 10 });
     const lastAssistant = list.data.find(m => m.role === "assistant");
-    const parts = (lastAssistant?.content ?? []) as Array<any>;
+    const parts = (lastAssistant?.content ?? []) as Array<{
+      type: string;
+      text?: { value?: string };
+    }>;
+
     const reply =
-      parts.map(c => (c?.type === "text" ? c?.text?.value : null))
-           .filter(Boolean).join("\n\n") || "";
+      parts
+        .map((c) => (c.type === "text" ? c.text?.value ?? null : null))
+        .filter((val): val is string => Boolean(val))
+        .join("\n\n") || "";
 
     return NextResponse.json({ threadId: tId, reply });
   } catch (e: unknown) {
