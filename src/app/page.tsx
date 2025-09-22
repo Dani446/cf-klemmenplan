@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Narrow ReactMarkdown type (optional dependency)
-// Narrow ReactMarkdown type (optional dependency)
+
 "use client";
+// Narrow ReactMarkdown type (optional dependency)
 import React, { useState } from "react";
-import type { JSX } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
+import Markdown from "react-markdown";
 
 type UploadedFile = { name: string; size: number; type?: string };
 type Row = {
@@ -37,13 +37,7 @@ type AnalysisResult = {
 // (Optional pretty markdown — run: npm i react-markdown)
 // If react-markdown is not installed, the fallback <pre> will be used.
 type MarkdownComponent = ((props: { children: string }) => React.ReactElement) | null;
-let ReactMarkdown: MarkdownComponent = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ReactMarkdown = (require("react-markdown").default as (props: { children: string }) => React.ReactElement);
-} catch {
-  ReactMarkdown = null;
-}
+const ReactMarkdown: MarkdownComponent = (props) => <Markdown {...props} />;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
