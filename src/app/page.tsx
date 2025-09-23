@@ -250,18 +250,13 @@ export default function Page() {
                   <label style={{ display: "block", marginBottom: 8 }}>RI-/Dokument-Dateien hochladen (PDF/Bild):</label>
                   {/* Drag & Drop + Click to select */}
                   <div
+                    className="upload-zone"
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       const dt = e.dataTransfer;
                       if (dt?.files?.length) handleAddFiles(dt.files);
-                    }}
-                    style={{
-                      border: "1px dashed #2a3346",
-                      borderRadius: 10,
-                      padding: 16,
-                      background: "#0f1322",
                     }}
                   >
                     <input
@@ -271,7 +266,7 @@ export default function Page() {
                       title="Dateien auswählen (Mehrfachauswahl möglich)"
                       onChange={(e) => handleAddFiles(e.target.files)}
                     />
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                    <div className="upload-hint">
                       Dateien hierher ziehen oder klicken, um Dateien auszuwählen.
                     </div>
                   </div>
@@ -288,7 +283,7 @@ export default function Page() {
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <button
-                            className="btn"
+                            className="btn btn--ghost btn--sm"
                             type="button"
                             onClick={clearFiles}
                             title="Alle entfernen"
@@ -300,33 +295,12 @@ export default function Page() {
                       </div>
 
                       {/* Ausgewählte Dateien als Chips */}
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                      <div className="chips">
                         {files.map((f, idx) => (
-                          <span
-                            key={fileSignature(f)}
-                            className="badge"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 10,
-                              lineHeight: 1.2,
-                              paddingRight: 6,
-                              maxWidth: "100%",
-                            }}
-                            title={`${f.name} (${Math.round(f.size / 1024)} kB)`}
-                          >
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-                            <span style={{ opacity: 0.6, fontSize: 12 }}>({Math.round(f.size / 1024)} kB)</span>
-                            <button
-                              className="btn"
-                              type="button"
-                              onClick={() => removeFile(idx)}
-                              title={`Datei ${f.name} entfernen`}
-                              aria-label={`Datei ${f.name} entfernen`}
-                              style={{ padding: "2px 8px", fontSize: 12 }}
-                            >
-                              ×
-                            </button>
+                          <span key={fileSignature(f)} className="chip" title={`${f.name} (${Math.round(f.size / 1024)} kB)`}>
+                            <span className="chip__name">{f.name}</span>
+                            <span className="chip__meta">({Math.round(f.size / 1024)} kB)</span>
+                            <button className="chip__close" type="button" onClick={() => removeFile(idx)} aria-label={`Datei ${f.name} entfernen`}>×</button>
                           </span>
                         ))}
                       </div>
@@ -348,7 +322,8 @@ export default function Page() {
 
                 {result !== null && (
                   <div className="panel panel--card" style={{ marginTop: 16 }}>
-                    <h3 style={{ marginTop: 0 }}>Analyse-Ergebnis</h3>
+                    <h3>Analyse-Ergebnis</h3>
+                    <div className="hr" />
 
                     {/* Summary cards */}
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -450,7 +425,7 @@ export default function Page() {
                     {typeof result === "object" && result !== null && !("error" in result) && typeof result.reply === "string" && result.reply && (
                       <details style={{ marginTop: 14 }}>
                         <summary style={{ cursor: "pointer" }}>Erklärtext anzeigen (optional)</summary>
-                        <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 8, padding: 12, background: "#fff" }}>
+                        <div className="explain" style={{ marginTop: 10, padding: 12 }}>
                           {ReactMarkdown ? (
                             ReactMarkdown({ children: String(result.reply) })
                           ) : (
@@ -463,7 +438,7 @@ export default function Page() {
                     {/* Raw JSON (collapsible) */}
                     <details style={{ marginTop: 12 }}>
                       <summary style={{ cursor: "pointer" }}>Debug‑Rohdaten anzeigen</summary>
-                      <pre style={{ whiteSpace: "pre-wrap", background: "#f7f7f7", padding: 12, borderRadius: 6 }}>
+                      <pre className="debug-pre" style={{ whiteSpace: "pre-wrap", padding: 12, borderRadius: 6 }}>
                         {JSON.stringify(result, null, 2)}
                       </pre>
                     </details>
@@ -478,25 +453,26 @@ export default function Page() {
                   <p style={{ margin: "6px 0 12px 0", opacity: 0.7, fontSize: 13 }}>
                     Für Nachfragen/Änderungen nach der ersten Klemmenbelegung.
                   </p>
-                  <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 12, height: 360, overflowY: "auto", background: "#fafafa" }}>
+                  <div className="chat-log">
                     {messages.length === 0 && (
                       <p style={{ opacity: 0.7 }}>
                         Frag z. B.: &quot;Ergänze die Tabelle um Kabelquerschnitte nach VDE&quot; oder &quot;Nutze CAREL pRack300T&quot;.
                       </p>
                     )}
                     {messages.map((m, i) => (
-                      <div key={i} style={{ marginBottom: 10 }}>
+                      <div key={i} className={`msg ${m.role === "user" ? "msg--user" : "msg--assistant"}`}>
                         <b>{m.role === "user" ? "Du" : "Assistent"}:</b> {m.content}
                       </div>
                     ))}
-                    {chatLoading && <p style={{ opacity: 0.7 }}>Assistent denkt…</p>}
+                    {chatLoading && <div className="msg msg--assistant"><small>Assistent denkt…</small></div>}
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <input
+                      className="input"
+                      style={{ flex: 1 }}
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       placeholder="Nachricht eingeben…"
-                      style={{ flex: 1, padding: 8 }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") sendChat();
                       }}
