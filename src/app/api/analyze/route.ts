@@ -8,19 +8,57 @@ import type { MessageContent } from "openai/resources/beta/threads/messages";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/** Extract first JSON code block (```json ... ```) or best-effort JSON substring */
-function extractJSON(text: string): unknown | null {
-  try {
-    const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
-    if (fence?.[1]) {
-      return JSON.parse(fence[1]);
+/** Data model for the JSON we expect from the assistant */
+export interface KlemmenRow {
+  signal: string;
+  category: "Sensor" | "Aktor" | "Verbraucher";
+  ioType: "DI" | "DO" | "AI" | "AO" | "PWM" | "COM";
+  module: string;
+  slot: string;
+  terminal: string;
+  voltage: string;
+  cable: string;
+  article: string;
+  source: string;
+}
+export interface KlemmenTable {
+  controller: "Carel" | "Danfoss" | "Wurm";
+  assumptions: string;
+  rows: KlemmenRow[];
+}
+
+/** Extract first JSON code block (```json ... ```) or best‑effort JSON substring, validated against KlemmenTable shape */
+function extractJSON(text: string): KlemmenTable | null {
+  const tryParse = (raw: string): KlemmenTable | null => {
+    try {
+      const obj = JSON.parse(raw) as unknown;
+
+      // Runtime shape check (minimal)
+      if (
+        obj &&
+        typeof obj === "object" &&
+        "controller" in obj &&
+        "rows" in obj &&
+        Array.isArray((obj as { rows: unknown }).rows)
+      ) {
+        const tbl = obj as KlemmenTable;
+        return tbl;
+      }
+      return null;
+    } catch {
+      return null;
     }
-  } catch {}
-  // fallback: try whole text
-  try {
-    return JSON.parse(text);
-  } catch {}
-  return null;
+  };
+
+  // fenced block first
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  if (fence?.[1]) {
+    const parsed = tryParse(fence[1]);
+    if (parsed) return parsed;
+  }
+
+  // fallback whole text
+  return tryParse(text);
 }
 
 export async function POST(req: Request) {
