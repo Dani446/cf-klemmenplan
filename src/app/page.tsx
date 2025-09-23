@@ -266,8 +266,9 @@ export default function Page() {
                   >
                     <input
                       type="file"
-                      accept=".pdf,.png,.jpg,.jpeg,.bck"
+                      accept=".pdf,.png,.jpg,.jpeg"
                       multiple
+                      title="Dateien auswählen (Mehrfachauswahl möglich)"
                       onChange={(e) => handleAddFiles(e.target.files)}
                     />
                     <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
@@ -275,37 +276,64 @@ export default function Page() {
                     </div>
                   </div>
                   <div style={{ marginTop: 12 }}>
-                    <button className="btn btn--accent" disabled={!files.length || isUploading} onClick={analyze}>
+                    <button className="btn btn--accent" type="button" disabled={!files.length || isUploading} onClick={analyze}>
                       {isUploading ? "Analysiere…" : "Analysieren"}
                     </button>
                   </div>
                   {files.length > 0 && (
-                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontSize: 13, opacity: 0.75 }}>
-                          {files.length} Datei{files.length === 1 ? "" : "en"} ausgewählt
+                        <div style={{ fontSize: 13, opacity: 0.85 }}>
+                          <b>{files.length}</b> Datei{files.length === 1 ? "" : "en"} ausgewählt
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
-                          <button className="btn" onClick={clearFiles} title="Alle entfernen">Alle entfernen</button>
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={clearFiles}
+                            title="Alle entfernen"
+                            aria-label="Alle ausgewählten Dateien entfernen"
+                          >
+                            Alle entfernen
+                          </button>
                         </div>
                       </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+
+                      {/* Ausgewählte Dateien als Chips */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                         {files.map((f, idx) => (
-                          <span key={fileSignature(f)} className="badge" style={{ gap: 10 }}>
-                            <span>{f.name}</span>
-                            <span style={{ opacity: 0.6, fontSize: 12 }}>
-                              ({Math.round(f.size / 1024)} kB)
-                            </span>
+                          <span
+                            key={fileSignature(f)}
+                            className="badge"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 10,
+                              lineHeight: 1.2,
+                              paddingRight: 6,
+                              maxWidth: "100%",
+                            }}
+                            title={`${f.name} (${Math.round(f.size / 1024)} kB)`}
+                          >
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                            <span style={{ opacity: 0.6, fontSize: 12 }}>({Math.round(f.size / 1024)} kB)</span>
                             <button
                               className="btn"
+                              type="button"
                               onClick={() => removeFile(idx)}
-                              title="Datei entfernen"
+                              title={`Datei ${f.name} entfernen`}
+                              aria-label={`Datei ${f.name} entfernen`}
                               style={{ padding: "2px 8px", fontSize: 12 }}
                             >
                               ×
                             </button>
                           </span>
                         ))}
+                      </div>
+
+                      {/* Hinweis zur Mehrfachauswahl */}
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>
+                        Tipp: Du kannst mehrere Dateien gleichzeitig auswählen (Strg/Cmd gedrückt halten) oder weitere Dateien später hinzufügen. Bereits ausgewählte Dateien bleiben erhalten.
                       </div>
                     </div>
                   )}
