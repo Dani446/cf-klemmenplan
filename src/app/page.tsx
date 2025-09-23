@@ -219,7 +219,7 @@ export default function Page() {
       <section className="hero">
         <div className="container">
           <h1 className="hero__title">FIT‑OUT&nbsp;SERVICES<br/>für Kälte‑Regelanlagen</h1>
-          <p className="hero__subtitle">RI‑Schema hinein, Klemmenbelegung heraus – schnell, konsistent, nachvollziehbar.</p>
+          <p className="hero__subtitle">KI Gestützte Klemmenplanbelegung</p>
         </div>
       </section>
 
