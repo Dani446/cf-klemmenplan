@@ -1,7 +1,7 @@
 
 "use client";
 // Narrow ReactMarkdown type (optional dependency)
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
 import Markdown from "react-markdown";
@@ -43,6 +43,31 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 export default function Page() {
   const { data: session, status } = useSession();
   const [files, setFiles] = useState<File[]>([]);
+  // --- File helpers: add, dedupe, remove, clear ---
+  const fileSignature = (f: File) => `${f.name}__${f.size}__${f.lastModified}`;
+  function uniqueBySignature(list: File[]) {
+    const seen = new Set<string>();
+    const out: File[] = [];
+    for (const f of list) {
+      const sig = fileSignature(f);
+      if (!seen.has(sig)) {
+        seen.add(sig);
+        out.push(f);
+      }
+    }
+    return out;
+  }
+  function handleAddFiles(list: FileList | null) {
+    if (!list) return;
+    const incoming = Array.from(list);
+    setFiles((prev) => uniqueBySignature([...prev, ...incoming]));
+  }
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+  function clearFiles() {
+    setFiles([]);
+  }
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +83,13 @@ export default function Page() {
   const [showChat, setShowChat] = useState(false);
   const [excelHref, setExcelHref] = useState<string | null>(null);
   const [excelName, setExcelName] = useState<string>("Klemmenbelegung.xlsx");
+
+  // Scroll to download section when ready
+  useEffect(() => {
+    if (!excelHref) return;
+    const el = document.getElementById("download-section");
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [excelHref]);
 
   function copyToClipboard(text: string) {
     if (navigator?.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
@@ -140,11 +172,6 @@ export default function Page() {
     } finally {
       setIsUploading(false);
       setTimeout(() => setStatusText(null), 2500);
-      // focus the download section if ready
-      if (excelHref) {
-        const el = document.getElementById("download-section");
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
     }
   }
 
@@ -217,24 +244,71 @@ export default function Page() {
 
             <div className="layout-grid">
               {/* LEFT: Upload + Result */}
-              <div>
+              <div className="grid-main" style={{ minWidth: 0 }}>
                 {/* Upload-Box */}
                 <div className="panel panel--card" style={{ marginTop: 16 }}>
                   <label style={{ display: "block", marginBottom: 8 }}>RI-/Dokument-Dateien hochladen (PDF/Bild):</label>
-                  <input
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.bck"
-                    multiple
-                    onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                  />
+                  {/* Drag & Drop + Click to select */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const dt = e.dataTransfer;
+                      if (dt?.files?.length) handleAddFiles(dt.files);
+                    }}
+                    style={{
+                      border: "1px dashed #2a3346",
+                      borderRadius: 10,
+                      padding: 16,
+                      background: "#0f1322",
+                    }}
+                  >
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.bck"
+                      multiple
+                      onChange={(e) => handleAddFiles(e.target.files)}
+                    />
+                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                      Dateien hierher ziehen oder klicken, um Dateien auszuwählen.
+                    </div>
+                  </div>
                   <div style={{ marginTop: 12 }}>
                     <button className="btn btn--accent" disabled={!files.length || isUploading} onClick={analyze}>
                       {isUploading ? "Analysiere…" : "Analysieren"}
                     </button>
-                    {files.length > 0 && (
-                      <span style={{ marginLeft: 8, opacity: 0.7 }}>{files.map((f) => f.name).join(", ")}</span>
-                    )}
                   </div>
+                  {files.length > 0 && (
+                    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 13, opacity: 0.75 }}>
+                          {files.length} Datei{files.length === 1 ? "" : "en"} ausgewählt
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button className="btn" onClick={clearFiles} title="Alle entfernen">Alle entfernen</button>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {files.map((f, idx) => (
+                          <span key={fileSignature(f)} className="badge" style={{ gap: 10 }}>
+                            <span>{f.name}</span>
+                            <span style={{ opacity: 0.6, fontSize: 12 }}>
+                              ({Math.round(f.size / 1024)} kB)
+                            </span>
+                            <button
+                              className="btn"
+                              onClick={() => removeFile(idx)}
+                              title="Datei entfernen"
+                              style={{ padding: "2px 8px", fontSize: 12 }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {statusText && (
                     <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
                       {statusText}
@@ -291,7 +365,7 @@ export default function Page() {
 
                     {/* Excel Download block */}
                     {excelHref && (
-                      <div id="download-section" className="download-card" style={{ marginTop: 12 }}>
+                      <div id="download-section" style={{ marginTop: 12 }}>
                         <div className="download-card">
                           <div>
                             <div style={{ fontSize: 13, opacity: 0.7 }}>Ergebnis</div>
@@ -371,7 +445,7 @@ export default function Page() {
 
               {/* RIGHT: Chat sidebar */}
               {showChat && (
-                <aside className="panel panel--card chat-panel" style={{ position: "sticky", top: 12, height: "calc(100vh - 160px)", overflow: "auto" }}>
+                <aside className="panel panel--card chat-panel aside-sticky">
                   <h3 style={{ marginTop: 0 }}>Chat (optional)</h3>
                   <p style={{ margin: "6px 0 12px 0", opacity: 0.7, fontSize: 13 }}>
                     Für Nachfragen/Änderungen nach der ersten Klemmenbelegung.
@@ -414,7 +488,7 @@ export default function Page() {
       </main>
       <a href="#"
          className="chat-fab"
-         title="Chat öffnen (rechts)"
+         title="Chat öffnen"
          onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
         💬
       </a>
