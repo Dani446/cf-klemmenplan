@@ -17,9 +17,24 @@ export async function POST(req: Request) {
   try {
     // Client darf KEINE Assistant-ID mehr schicken; wir wählen serverseitig die Chat-ID
     const body = await req.json().catch(() => ({}));
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    console.log("[chat] Request body:", JSON.stringify(body, null, 2));
     const existingThreadId: string | null =
       typeof body?.threadId === "string" && body.threadId.length ? body.threadId : null;
+
+    // Support either simple { message: string } or Vercel AI SDK-like { messages: [...] }
+    let inputText = "";
+    if (typeof body?.message === "string" && body.message.trim().length) {
+      inputText = body.message.trim();
+    } else if (Array.isArray(body?.messages) && body.messages.length) {
+      const last = body.messages[body.messages.length - 1];
+      // Try to resolve from different shapes
+      inputText =
+        last?.content?.[0]?.text?.value ??
+        last?.content?.text?.value ??
+        last?.content ??
+        "";
+    }
+    console.log("[chat] Resolved inputText:", inputText);
 
     const assistantId = process.env.OPENAI_ASSISTANT_ID_CHAT;
     if (!assistantId) {
@@ -40,21 +55,25 @@ export async function POST(req: Request) {
       ? { id: existingThreadId }
       : await client.beta.threads.create({});
 
-    // 2) Letzte User-Nachricht ermitteln (Fallback: 'Frage')
-    const lastUserContent =
-      messages?.[messages.length - 1]?.content ??
-      "Frage";
+    // 2) Prüfen, ob es überhaupt Text gibt
+    if (!inputText) {
+      return NextResponse.json(
+        { error: "Es wurde kein Text übermittelt. Sende { message: string } oder ein messages-Array." },
+        { status: 400 }
+      );
+    }
 
     // 3) Nutzer-Nachricht an Thread anhängen
     await client.beta.threads.messages.create(t.id, {
       role: "user",
-      content: String(lastUserContent),
+      content: inputText,
     });
 
     // 4) Run starten (mit Chat-Assistant-ID)
     const run = await client.beta.threads.runs.create(t.id, {
       assistant_id: assistantId,
     });
+    console.log("[chat] Using assistant_id:", assistantId, " thread:", t.id);
 
     // 5) Polling bis abgeschlossen/Fehler
     let tries = 0;
@@ -76,6 +95,7 @@ export async function POST(req: Request) {
         ?.map((c: any) => (c.type === "text" ? c.text?.value : null))
         .filter(Boolean)
         .join("\n\n") ?? "";
+    console.log("[chat] Assistant reply:", text);
 
     return NextResponse.json({ threadId: t.id, reply: text });
   } catch (e: unknown) {
