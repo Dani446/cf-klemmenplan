@@ -445,3 +445,42 @@ textarea[readonly],
 .panel--light .table{
   color: var(--on-white-text) !important;
 }
+
+/* --- Top Site Navigation --- */
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--cf-surface, #0f1218);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  gap: 12px;
+}
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.nav-link {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  opacity: .9;
+  border: 1px solid transparent;
+}
+.nav-link:hover {
+  opacity: 1;
+  border-color: rgba(255,255,255,.14);
+}
+.nav-link.is-active {
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.2);
+}

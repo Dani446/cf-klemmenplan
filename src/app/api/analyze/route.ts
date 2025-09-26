@@ -139,8 +139,17 @@ Gib die Klemmenbelegung **zuerst als JSON** zurück, mit exakt dieser Struktur (
 
     // 4) Run starten (ohne tool_resources – Dateien hängen bereits an der Message)
     console.log("[analyze] run start");
+    // resolve assistant id for analyze endpoint
+    const assistantId = process.env.OPENAI_ASSISTANT_ID_ANALYZE;
+    if (!assistantId) {
+      console.error("[analyze] missing env OPENAI_ASSISTANT_ID_ANALYZE");
+      return NextResponse.json(
+        { error: "Server misconfigured: OPENAI_ASSISTANT_ID_ANALYZE is not set." },
+        { status: 500 }
+      );
+    }
     const run = await client.beta.threads.runs.create(threadId!, {
-      assistant_id: process.env.OPENAI_ASSISTANT_ID!,
+      assistant_id: assistantId,
     });
 
     // 5) Polling, bis abgeschlossen
