@@ -3,72 +3,77 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import type { MessageContent } from "openai/resources/beta/threads/messages";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
+    throw new Error(
+      "OPENAI_API_KEY fehlt (lokal: .env.local setzen; Vercel: Project → Settings → Environment Variables)."
+    );
+  }
+  return new OpenAI({ apiKey: key });
+}
+
+interface ChatPostBody {
+  threadId?: string | null;
+  message: string;
+  assistantId?: string | null; // optional: alternate assistant per request
+}
+
+function resolveAssistantId(reqBody: ChatPostBody): string {
+  const fromBody = (reqBody.assistantId || "").trim();
+  const env1 = (process.env.OPENAI_ASSISTANT_ID || "").trim();
+  const env2 = (process.env.OPENAI_ASSISTANT_ID_CHAT || "").trim();
+  const env3 = (process.env.NEXT_PUBLIC_ASSISTANT_ID_CHAT || "").trim();
+  const id = fromBody || env1 || env2 || env3;
+  if (!id) throw new Error("Assistant-ID fehlt. Setze OPENAI_ASSISTANT_ID oder reiche assistantId im Body mit.");
+  return id;
+}
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const { message, threadId } = (body ?? {}) as {
-      message?: string;
-      threadId?: string | null;
-    };
+    const client = getOpenAI();
+    const body = (await req.json()) as ChatPostBody;
+    const userMsg = (body?.message || "").trim();
+    if (!userMsg) return NextResponse.json({ error: "message fehlt" }, { status: 400 });
 
-    if (!message || typeof message !== "string") {
-      return NextResponse.json({ error: "Missing 'message'." }, { status: 400 });
-    }
+    const assistantId = resolveAssistantId(body);
 
-    // Thread anlegen/übernehmen
-    let tid = typeof threadId === "string" && threadId.length ? threadId : null;
-    if (!tid) {
+    let threadId = (body.threadId || "").trim() || null;
+    if (!threadId) {
       const t = await client.beta.threads.create({});
-      tid = t.id;
+      threadId = t.id;
     }
 
-    // User-Message hinzufügen
-    await client.beta.threads.messages.create(tid!, {
-      role: "user",
-      content: message,
-    });
+    await client.beta.threads.messages.create(threadId, { role: "user", content: userMsg });
 
-    // Run mit dem Q&A-Assistenten starten
-    const run = await client.beta.threads.runs.create(tid!, {
-      assistant_id: process.env.OPENAI_ASSISTANT_ID_CHAT!,
-    });
+    const run = await client.beta.threads.runs.create(threadId, { assistant_id: assistantId });
 
-    // Warten bis abgeschlossen
+    // poll until completed (max ~2min)
     let tries = 0;
     while (tries < 120) {
-      const r = await client.beta.threads.runs.retrieve(tid!, run.id);
+      const r = await client.beta.threads.runs.retrieve(threadId, run.id);
       if (r.status === "completed") break;
       if (["failed", "cancelled", "expired"].includes(r.status ?? "")) {
-        return NextResponse.json(
-          { error: `Run status: ${r.status}`, threadId: tid },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: `Run status: ${r.status}` }, { status: 500 });
       }
       await new Promise((res) => setTimeout(res, 1000));
       tries++;
     }
 
-    // Antwort lesen
-    const list = await client.beta.threads.messages.list(tid!, { limit: 15 });
+    const list = await client.beta.threads.messages.list(threadId, { limit: 10 });
     const lastAssistant = list.data.find((m) => m.role === "assistant");
+    const parts = (lastAssistant?.content ?? []) as MessageContent[];
     const reply =
-      (lastAssistant?.content ?? [])
-        .map((c: any) => (c.type === "text" ? c.text?.value ?? "" : ""))
-        .join("\n\n")
-        .trim() || "—";
+      parts
+        .map((c) => (c.type === "text" ? c.text?.value ?? null : null))
+        .filter((v): v is string => Boolean(v))
+        .join("\n\n") || "(Keine Text-Antwort erhalten)";
 
-    return NextResponse.json({ threadId: tid, reply });
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || String(e) },
-      { status: 500 }
-    );
+    return NextResponse.json({ threadId, reply });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-}
-
-export async function GET() {
-  return NextResponse.json({ error: "Use POST /api/chat." }, { status: 405 });
 }
