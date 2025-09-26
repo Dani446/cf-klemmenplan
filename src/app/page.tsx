@@ -1,7 +1,7 @@
 
 "use client";
 // Narrow ReactMarkdown type (optional dependency)
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
 import Markdown from "react-markdown";
@@ -264,7 +264,7 @@ export default function Page() {
   }
 
   return (
-    <>
+    <Suspense fallback={<div className="p-6 text-sm text-zinc-500">Lade…</div>}>
       {/* HERO */}
       <section className="hero">
         <div className="container">
@@ -598,6 +598,6 @@ export default function Page() {
          onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
         💬
       </a>
-    </>
+    </Suspense>
   );
 }
